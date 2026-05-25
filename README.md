@@ -1,6 +1,6 @@
-# TitanDesk Community
+# TitanCore Community
 
-TitanDesk Community is an open-source ISP operations starter for managing clients, packages, MikroTik routers, OLT inventory, ONU records, alerts, and monitoring data.
+TitanCore Community is an open-source ISP operations starter for managing clients, packages, MikroTik routers, OLT inventory, ONU records, alerts, and monitoring data.
 
 The project is designed around a simple production path: the frontend talks to the PHP API, the PHP API reads and writes MySQL, and a separate Node.js worker polls network devices and stores results in MySQL.
 
