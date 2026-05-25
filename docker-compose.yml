@@ -1,0 +1,51 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change_me}
+      MYSQL_DATABASE: app_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./database:/docker-entrypoint-initdb.d:ro
+
+  backend:
+    build: ./backend
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: app_db
+      DB_USERNAME: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change_me}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      APP_KEY: ${APP_KEY:-replace-with-a-long-random-string}
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mysql
+
+  worker:
+    build: ./worker
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: app_db
+      DB_USERNAME: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change_me}
+      APP_KEY: ${APP_KEY:-replace-with-a-long-random-string}
+      POLL_INTERVAL_SECONDS: 60
+    depends_on:
+      - mysql
+
+  frontend:
+    build: ./frontend
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080/api
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  mysql-data:

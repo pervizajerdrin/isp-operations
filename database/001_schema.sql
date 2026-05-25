@@ -1,0 +1,265 @@
+CREATE TABLE IF NOT EXISTS users (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(140) NOT NULL,
+  email VARCHAR(180) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  role ENUM('admin','technician','viewer') NOT NULL DEFAULT 'viewer',
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  last_login_at DATETIME DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS packages (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(140) NOT NULL UNIQUE,
+  download_mbps INT UNSIGNED NOT NULL,
+  upload_mbps INT UNSIGNED NOT NULL,
+  price DECIMAL(12,2) NOT NULL DEFAULT 0,
+  mikrotik_queue_limit VARCHAR(80) DEFAULT NULL,
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS clients (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  package_id INT UNSIGNED DEFAULT NULL,
+  name VARCHAR(180) NOT NULL,
+  phone VARCHAR(80) DEFAULT NULL,
+  email VARCHAR(180) DEFAULT NULL,
+  address VARCHAR(255) DEFAULT NULL,
+  status ENUM('active','suspended','offline') NOT NULL DEFAULT 'active',
+  notes TEXT DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_clients_status (status),
+  CONSTRAINT fk_clients_package FOREIGN KEY (package_id) REFERENCES packages(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS mikrotik_routers (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(140) NOT NULL,
+  host VARCHAR(180) NOT NULL,
+  api_port INT UNSIGNED NOT NULL DEFAULT 8728,
+  connection_type ENUM('api','api-ssl') NOT NULL DEFAULT 'api',
+  location VARCHAR(180) DEFAULT NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  last_poll_status ENUM('never','success','failed') NOT NULL DEFAULT 'never',
+  last_poll_at DATETIME DEFAULT NULL,
+  last_error VARCHAR(255) DEFAULT NULL,
+  identity VARCHAR(180) DEFAULT NULL,
+  routeros_version VARCHAR(120) DEFAULT NULL,
+  cpu_load DECIMAL(6,2) DEFAULT NULL,
+  uptime VARCHAR(120) DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_mikrotik_host_port (host, api_port)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS olts (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(140) NOT NULL,
+  vendor ENUM('zte','huawei','bdcom','vsol','mock','other') NOT NULL DEFAULT 'mock',
+  host VARCHAR(180) DEFAULT NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  location VARCHAR(180) DEFAULT NULL,
+  last_poll_status ENUM('never','success','failed') NOT NULL DEFAULT 'never',
+  last_poll_at DATETIME DEFAULT NULL,
+  last_error VARCHAR(255) DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS onus (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  client_id INT UNSIGNED DEFAULT NULL,
+  olt_id INT UNSIGNED DEFAULT NULL,
+  serial_number VARCHAR(100) NOT NULL UNIQUE,
+  pon_port VARCHAR(80) DEFAULT NULL,
+  onu_id VARCHAR(60) DEFAULT NULL,
+  rx_power DECIMAL(6,2) DEFAULT NULL,
+  tx_power DECIMAL(6,2) DEFAULT NULL,
+  distance_meters INT UNSIGNED DEFAULT NULL,
+  status ENUM('online','offline','unauthorized','disabled') NOT NULL DEFAULT 'offline',
+  authorization_status ENUM('authorized','unauthorized','pending') NOT NULL DEFAULT 'pending',
+  last_seen DATETIME DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_onus_status (status),
+  INDEX idx_onus_signal (rx_power),
+  CONSTRAINT fk_onus_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
+  CONSTRAINT fk_onus_olt FOREIGN KEY (olt_id) REFERENCES olts(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS routers (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  client_id INT UNSIGNED DEFAULT NULL,
+  mikrotik_router_id INT UNSIGNED DEFAULT NULL,
+  name VARCHAR(140) DEFAULT NULL,
+  model VARCHAR(140) DEFAULT NULL,
+  ip_address VARCHAR(64) DEFAULT NULL,
+  mac_address VARCHAR(64) DEFAULT NULL,
+  status ENUM('online','offline','unknown') NOT NULL DEFAULT 'unknown',
+  last_seen DATETIME DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_routers_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
+  CONSTRAINT fk_routers_mikrotik FOREIGN KEY (mikrotik_router_id) REFERENCES mikrotik_routers(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS device_credentials (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  device_type ENUM('mikrotik','olt') NOT NULL,
+  device_id INT UNSIGNED NOT NULL,
+  username VARCHAR(180) NOT NULL,
+  password_encrypted TEXT NOT NULL,
+  encryption_version VARCHAR(40) NOT NULL DEFAULT 'aes-256-gcm',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_device_credentials (device_type, device_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS device_poll_logs (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  device_type ENUM('mikrotik','olt') NOT NULL,
+  device_id INT UNSIGNED NOT NULL,
+  action VARCHAR(80) NOT NULL DEFAULT 'poll',
+  status ENUM('success','failed') NOT NULL,
+  message VARCHAR(255) DEFAULT NULL,
+  duration_ms INT UNSIGNED DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_poll_logs_device (device_type, device_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS traffic_samples (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  mikrotik_router_id INT UNSIGNED DEFAULT NULL,
+  client_id INT UNSIGNED DEFAULT NULL,
+  interface_name VARCHAR(140) DEFAULT NULL,
+  target_name VARCHAR(180) DEFAULT NULL,
+  rx_bps BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  tx_bps BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  sampled_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_traffic_router_time (mikrotik_router_id, sampled_at),
+  CONSTRAINT fk_traffic_mikrotik FOREIGN KEY (mikrotik_router_id) REFERENCES mikrotik_routers(id) ON DELETE CASCADE,
+  CONSTRAINT fk_traffic_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS signal_samples (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  onu_id INT UNSIGNED NOT NULL,
+  rx_power DECIMAL(6,2) DEFAULT NULL,
+  tx_power DECIMAL(6,2) DEFAULT NULL,
+  sampled_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_signal_onu_time (onu_id, sampled_at),
+  CONSTRAINT fk_signal_onu FOREIGN KEY (onu_id) REFERENCES onus(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS onu_events (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  onu_id INT UNSIGNED DEFAULT NULL,
+  event_type VARCHAR(100) NOT NULL,
+  severity ENUM('info','warning','critical') NOT NULL DEFAULT 'info',
+  message VARCHAR(255) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_onu_events_created (created_at),
+  CONSTRAINT fk_onu_events_onu FOREIGN KEY (onu_id) REFERENCES onus(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS alerts (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  severity ENUM('info','warning','critical') NOT NULL,
+  type VARCHAR(100) NOT NULL,
+  source_type ENUM('system','mikrotik','olt','onu','client') NOT NULL DEFAULT 'system',
+  source_id INT UNSIGNED DEFAULT NULL,
+  message VARCHAR(255) NOT NULL,
+  acknowledged_at DATETIME DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_alerts_open (acknowledged_at, severity, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS settings (
+  setting_key VARCHAR(120) PRIMARY KEY,
+  setting_value TEXT NOT NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED DEFAULT NULL,
+  action ENUM('connect','poll','authorize','reboot','disable','update','delete','create','login','manual_poll','test_connection') NOT NULL,
+  entity_type VARCHAR(80) DEFAULT NULL,
+  entity_id INT UNSIGNED DEFAULT NULL,
+  ip_address VARCHAR(64) DEFAULT NULL,
+  message VARCHAR(255) DEFAULT NULL,
+  metadata JSON DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_audit_created (created_at),
+  CONSTRAINT fk_audit_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS mikrotik_interfaces (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  mikrotik_router_id INT UNSIGNED NOT NULL,
+  name VARCHAR(140) NOT NULL,
+  type VARCHAR(80) DEFAULT NULL,
+  running TINYINT(1) NOT NULL DEFAULT 0,
+  disabled TINYINT(1) NOT NULL DEFAULT 0,
+  rx_bps BIGINT UNSIGNED DEFAULT 0,
+  tx_bps BIGINT UNSIGNED DEFAULT 0,
+  last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_mikrotik_interface (mikrotik_router_id, name),
+  CONSTRAINT fk_interfaces_mikrotik FOREIGN KEY (mikrotik_router_id) REFERENCES mikrotik_routers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS mikrotik_dhcp_leases (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  mikrotik_router_id INT UNSIGNED NOT NULL,
+  address VARCHAR(64) DEFAULT NULL,
+  mac_address VARCHAR(64) DEFAULT NULL,
+  host_name VARCHAR(180) DEFAULT NULL,
+  status VARCHAR(80) DEFAULT NULL,
+  last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_dhcp_router (mikrotik_router_id),
+  CONSTRAINT fk_dhcp_mikrotik FOREIGN KEY (mikrotik_router_id) REFERENCES mikrotik_routers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS mikrotik_ppp_active (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  mikrotik_router_id INT UNSIGNED NOT NULL,
+  name VARCHAR(180) NOT NULL,
+  address VARCHAR(64) DEFAULT NULL,
+  uptime VARCHAR(80) DEFAULT NULL,
+  service VARCHAR(80) DEFAULT NULL,
+  caller_id VARCHAR(120) DEFAULT NULL,
+  last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_ppp_active_router (mikrotik_router_id),
+  CONSTRAINT fk_ppp_active_mikrotik FOREIGN KEY (mikrotik_router_id) REFERENCES mikrotik_routers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS mikrotik_ppp_secrets (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  mikrotik_router_id INT UNSIGNED NOT NULL,
+  remote_id VARCHAR(120) DEFAULT NULL,
+  name VARCHAR(180) NOT NULL,
+  profile VARCHAR(120) DEFAULT NULL,
+  disabled TINYINT(1) NOT NULL DEFAULT 0,
+  last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_ppp_secret (mikrotik_router_id, name),
+  CONSTRAINT fk_ppp_secret_mikrotik FOREIGN KEY (mikrotik_router_id) REFERENCES mikrotik_routers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS mikrotik_simple_queues (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  mikrotik_router_id INT UNSIGNED NOT NULL,
+  remote_id VARCHAR(120) DEFAULT NULL,
+  name VARCHAR(180) NOT NULL,
+  target VARCHAR(180) DEFAULT NULL,
+  max_limit VARCHAR(80) DEFAULT NULL,
+  disabled TINYINT(1) NOT NULL DEFAULT 0,
+  bytes BIGINT UNSIGNED DEFAULT 0,
+  last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_simple_queue (mikrotik_router_id, name),
+  CONSTRAINT fk_queue_mikrotik FOREIGN KEY (mikrotik_router_id) REFERENCES mikrotik_routers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -1,0 +1,22 @@
+{
+  "name": "titandesk-community-worker",
+  "version": "1.0.0",
+  "description": "Device polling worker for TitanDesk Community",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "poll:once": "node index.js --once",
+    "check": "node --check index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "mysql2": "^3.22.3",
+    "routeros-client": "^1.1.1",
+    "socket.io-client": "^4.8.3",
+    "uuid": "^14.0.0"
+  }
+}
