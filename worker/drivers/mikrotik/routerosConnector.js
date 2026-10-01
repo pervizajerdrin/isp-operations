@@ -19,7 +19,7 @@ class MikroTikConnector {
 
   async close() {
     if (this.api) {
-      this.api.close()
+      await this.api.close()
     }
   }
 

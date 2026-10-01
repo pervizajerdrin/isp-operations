@@ -3,6 +3,7 @@ require('dotenv').config()
 const { db } = require('./services/db')
 const { decrypt } = require('./services/crypto')
 const { MikroTikConnector } = require('./drivers/mikrotik/routerosConnector')
+const { readMikroTikSnapshot } = require('./services/readMikroTikSnapshot')
 const { MockOltDriver } = require('./drivers/olt/mock')
 
 const once = process.argv.includes('--once')
@@ -47,15 +48,8 @@ async function pollMikroTik(router) {
       password: decrypt(creds[0].password_encrypted),
       secure: router.connection_type === 'api-ssl',
     })
-    await connector.connect()
-    const identity = await connector.readSystemIdentity()
-    const resource = await connector.readRouterOsVersion()
-    const interfaces = await connector.readInterfaces()
-    const leases = await connector.readDhcpLeases()
-    const active = await connector.readPppoeActiveSessions()
-    const secrets = await connector.readPppSecrets()
-    const queues = await connector.readSimpleQueues()
-    await connector.close()
+    const { identity, resource, interfaces, leases, active, secrets, queues } =
+      await readMikroTikSnapshot(connector)
 
     await db().execute(
       'UPDATE mikrotik_routers SET last_poll_status=?, last_poll_at=NOW(), last_error=NULL, identity=?, routeros_version=?, cpu_load=?, uptime=? WHERE id=?',
