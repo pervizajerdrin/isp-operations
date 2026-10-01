@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "poll:once": "node index.js --once",
-    "check": "node --check index.js"
+    "check": "node --check index.js",
+    "test": "node --test services/readMikroTikSnapshot.test.js"
   },
   "keywords": [],
   "author": "",
